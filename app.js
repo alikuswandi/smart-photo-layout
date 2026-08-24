@@ -58,10 +58,34 @@ function dataUrlToBlob(dataUrl){const [head,b64]=dataUrl.split(',');const mime=(
 function blobToDataUrl(blob){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(blob)})}
 async function fileToOptimizedDataUrl(file){const raw=await blobToDataUrl(file),img=await loadImage(raw);const maxDim=2800,ratio=Math.min(1,maxDim/Math.max(img.naturalWidth,img.naturalHeight));if(ratio===1&&file.size<1200000)return raw;const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*ratio));c.height=Math.max(1,Math.round(img.naturalHeight*ratio));const x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.9)}
 async function addFiles(files){const valid=[...files].filter(f=>f.type.startsWith('image/'));for(const file of valid){try{const dataUrl=await fileToOptimizedDataUrl(file),id=gid();state.photos.push({id,name:file.name,dataUrl,aiCutoutDataUrl:null});state.adjustments[id]={...DEFAULT_ADJ}}catch(e){console.error(e);alert('Gagal membaca '+file.name)}}renderPhotos();scheduleSave()}
-function removePhoto(id){state.photos=state.photos.filter(x=>x.id!==id);state.queue=state.queue.filter(x=>x.photoId!==id);delete state.adjustments[id];resetCache(id);invalidate(false);renderPhotos();renderQueue();scheduleSave()}
-function addToQueue(photoId,presetId){const p=PHOTO_PRESETS.find(x=>x.id===presetId);state.queue.push({id:gid(),photoId,presetId:p.id,w:p.w,h:p.h,name:p.name,qty:1});renderQueue();invalidate()}
-function renderPhotos(){const el=$('#photoLibrary');if(!state.photos.length){el.innerHTML='<div class="empty-mini">Belum ada foto.</div>';return}el.innerHTML=state.photos.map(p=>`<div class="photo-card"><div class="photo-head"><img class="thumb" src="${p.aiCutoutDataUrl||p.dataUrl}"><div class="photo-meta"><div class="filename" title="${esc(p.name)}">${esc(p.name)}</div><div class="photo-actions"><button class="link-edit" data-edit-photo="${p.id}">✎ Edit Foto</button><button class="link-danger" data-remove-photo="${p.id}">🗑 Hapus</button></div></div></div><div class="preset-grid">${PHOTO_PRESETS.map(pr=>`<button class="preset-btn" data-add="${p.id}|${pr.id}">+ ${pr.id}</button>`).join('')}</div></div>`).join('')}
-function renderQueue(){const el=$('#printQueue');$('#queueBadge').textContent=`${state.queue.length} item`;if(!state.queue.length){el.innerHTML='<div class="empty-mini">Antrean masih kosong.</div>';return}el.innerHTML=state.queue.map(q=>{const p=state.photos.find(x=>x.id===q.photoId);if(!p)return'';return `<div class="queue-item"><img src="${p.aiCutoutDataUrl||p.dataUrl}"><div class="queue-info"><b>${esc(q.name)}</b><span>${q.w} × ${q.h} mm</span></div><div><div class="qty"><button data-qty="${q.id}|-1">−</button><span>${q.qty}</span><button data-qty="${q.id}|1">+</button></div><div class="queue-actions"><button class="icon-mini" data-edit="${q.photoId}" title="Edit Foto">✎</button><button class="icon-mini danger" data-remove-queue="${q.id}" title="Hapus">🗑</button></div></div></div>`}).join('')}
+function removePhoto(id){
+  const removeIds=new Set(state.photos.filter(p=>p.id===id||p.sourcePhotoId===id).map(p=>p.id));
+  state.photos=state.photos.filter(p=>!removeIds.has(p.id));
+  state.queue=state.queue.filter(q=>!removeIds.has(q.photoId)&&q.sourcePhotoId!==id);
+  for(const rid of removeIds){delete state.adjustments[rid];resetCache(rid)}
+  invalidate(false);renderPhotos();renderQueue();scheduleSave()
+}
+function addToQueue(photoId,presetId){
+  const preset=PHOTO_PRESETS.find(x=>x.id===presetId),source=state.photos.find(x=>x.id===photoId);
+  if(!preset||!source)return;
+  const queuePhotoId=gid(),sourceRootId=source.sourcePhotoId||source.id;
+  state.photos.push({
+    ...source,
+    id:queuePhotoId,
+    sourcePhotoId:sourceRootId,
+    isQueueClone:true
+  });
+  state.adjustments[queuePhotoId]={...DEFAULT_ADJ,...(state.adjustments[photoId]||{})};
+  state.queue.push({
+    id:gid(),
+    photoId:queuePhotoId,
+    sourcePhotoId:sourceRootId,
+    presetId:preset.id,w:preset.w,h:preset.h,name:preset.name,qty:1
+  });
+  renderQueue();invalidate()
+}
+function renderPhotos(){const el=$('#photoLibrary'),libraryPhotos=state.photos.filter(p=>!p.isQueueClone);if(!libraryPhotos.length){el.innerHTML='<div class="empty-mini">Belum ada foto.</div>';return}el.innerHTML=libraryPhotos.map(p=>`<div class="photo-card"><div class="photo-head"><img class="thumb" src="${p.aiCutoutDataUrl||p.dataUrl}"><div class="photo-meta"><div class="filename" title="${esc(p.name)}">${esc(p.name)}</div><div class="photo-actions"><button class="link-edit" data-edit-photo="${p.id}">✎ Edit Foto</button><button class="link-danger" data-remove-photo="${p.id}">🗑 Hapus</button></div></div></div><div class="preset-grid">${PHOTO_PRESETS.map(pr=>`<button class="preset-btn" data-add="${p.id}|${pr.id}">+ ${pr.id}</button>`).join('')}</div></div>`).join('')}
+function renderQueue(){const el=$('#printQueue');$('#queueBadge').textContent=`${state.queue.length} item`;if(!state.queue.length){el.innerHTML='<div class="empty-mini">Antrean masih kosong.</div>';return}el.innerHTML=state.queue.map(q=>{const p=state.photos.find(x=>x.id===q.photoId);if(!p)return'';return `<div class="queue-item"><img src="${p.aiCutoutDataUrl||p.dataUrl}"><div class="queue-info"><b>${esc(q.name)}</b><span>${q.w} × ${q.h} mm</span></div><div><div class="qty"><button data-qty="${q.id}|-1">−</button><span>${q.qty}</span><button data-qty="${q.id}|1">+</button></div><div class="queue-actions"><button class="icon-mini" data-edit="${q.photoId}" title="Edit khusus item antrean ini">✎</button><button class="icon-mini danger" data-remove-queue="${q.id}" title="Hapus">🗑</button></div></div></div>`}).join('')}
 function splitRect(rect,placed,gap){const out=[],rw=rect.w-placed.w-gap,bh=rect.h-placed.h-gap;if(rw>=bh){if(rw>0)out.push({x:rect.x+placed.w+gap,y:rect.y,w:rw,h:rect.h});if(bh>0)out.push({x:rect.x,y:rect.y+placed.h+gap,w:placed.w,h:bh})}else{if(bh>0)out.push({x:rect.x,y:rect.y+placed.h+gap,w:rect.w,h:bh});if(rw>0)out.push({x:rect.x+placed.w+gap,y:rect.y,w:rw,h:placed.h})}return out.filter(r=>r.w>.01&&r.h>.01)}
 function prune(rects){return rects.filter((r,i)=>!rects.some((o,j)=>i!==j&&r.x>=o.x&&r.y>=o.y&&r.x+r.w<=o.x+o.w&&r.y+r.h<=o.y+o.h))}
 function runLayout(){if(!state.queue.length)return alert('Antrean kosong! Tambahkan ukuran cetak terlebih dahulu.');const s=settings(),paper=PAPER_SIZES[s.paperSize],usableW=paper.w-2*s.margin,usableH=paper.h-2*s.margin;if(usableW<=0||usableH<=0)return alert('Margin terlalu besar.');let items=[];state.queue.forEach(q=>{for(let i=0;i<q.qty;i++)items.push({...q,uniqueId:`${q.id}_${i}`})});items.sort((a,b)=>b.w*b.h-a.w*a.h);const makePage=i=>({index:i,items:[],freeRects:[{x:s.margin,y:s.margin,w:usableW,h:usableH}]});const pages=[makePage(0)];for(const item of items){let best=null;for(let pi=0;pi<pages.length;pi++){for(let ri=0;ri<pages[pi].freeRects.length;ri++){const r=pages[pi].freeRects[ri],vars=[{w:item.w,h:item.h,rotated:false}];if(s.smartRotation&&item.w!==item.h)vars.push({w:item.h,h:item.w,rotated:true});for(const v of vars){if(v.w<=r.w+.01&&v.h<=r.h+.01){const waste=r.w*r.h-v.w*v.h,short=Math.min(r.w-v.w,r.h-v.h),score=waste+short*.15;if(!best||score<best.score)best={pi,ri,v,r,score}}}}}if(!best){pages.push(makePage(pages.length));const pi=pages.length-1,r=pages[pi].freeRects[0],vars=[{w:item.w,h:item.h,rotated:false},...(s.smartRotation?[{w:item.h,h:item.w,rotated:true}]:[])].filter(v=>v.w<=r.w+.01&&v.h<=r.h+.01);if(!vars.length){pages.pop();alert(`${item.name} terlalu besar untuk ${s.paperSize}.`);continue}vars.sort((a,b)=>(r.w*r.h-a.w*a.h)-(r.w*r.h-b.w*b.h));best={pi,ri:0,v:vars[0],r,score:0}}const page=pages[best.pi],placed={...item,originalW:item.w,originalH:item.h,x:best.r.x,y:best.r.y,w:best.v.w,h:best.v.h,rotated:best.v.rotated};page.items.push(placed);page.freeRects.splice(best.ri,1,...splitRect(best.r,placed,s.gap));page.freeRects=prune(page.freeRects)}state.layoutPages=pages.filter(p=>p.items.length);renderWorkspace();scheduleSave()}
@@ -240,14 +264,59 @@ async function printLayout(){
   }catch(e){console.error(e);alert('Gagal menyiapkan halaman Print. Pastikan internet aktif saat library PDF pertama kali dimuat.')}
   finally{btn.disabled=false;btn.textContent=old}
 }
-function serializeProject(){return {version:5,savedAt:Date.now(),photos:state.photos,queue:state.queue,layoutPages:state.layoutPages,adjustments:state.adjustments,settings:settings()}}
+function serializeProject(){return {version:6,savedAt:Date.now(),photos:state.photos,queue:state.queue,layoutPages:state.layoutPages,adjustments:state.adjustments,settings:settings()}}
 function scheduleSave(){clearTimeout(state.saveTimer);state.saveTimer=setTimeout(saveProject,300)}
 function saveProject(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(serializeProject()));setStorageStatus('Project tersimpan otomatis','ok')}catch(e){console.warn(e);setStorageStatus('Penyimpanan penuh — kurangi foto','error')}}
-function restoreProject(){try{let raw=localStorage.getItem(STORAGE_KEY);if(!raw){for(const k of LEGACY_STORAGE_KEYS){raw=localStorage.getItem(k);if(raw)break}}if(!raw)return false;const d=JSON.parse(raw);if(!d||!Array.isArray(d.photos))return false;state.photos=d.photos.map(p=>({...p,aiCutoutDataUrl:p.aiCutoutDataUrl||null}));state.queue=Array.isArray(d.queue)?d.queue:[];state.layoutPages=Array.isArray(d.layoutPages)?d.layoutPages:[];state.adjustments=d.adjustments||{};for(const p of state.photos)state.adjustments[p.id]={...DEFAULT_ADJ,...(state.adjustments[p.id]||{})};const s=d.settings||{};if(s.paperSize&&PAPER_SIZES[s.paperSize])$('#paperSize').value=s.paperSize;if(s.margin!=null)$('#margin').value=s.margin;if(s.gap!=null)$('#gap').value=s.gap;if(s.smartRotation!=null)$('#smartRotation').checked=!!s.smartRotation;if(s.cropMarks!=null)$('#cropMarks').checked=!!s.cropMarks;if(s.photoBorder!=null)$('#photoBorder').checked=!!s.photoBorder;if(s.borderColor&&/^#[0-9a-f]{6}$/i.test(s.borderColor)){$('#borderColor').value=s.borderColor;$('#borderColorText').value=s.borderColor}if(s.borderWidth!=null)$('#borderWidth').value=s.borderWidth;if(['solid','dashed','dotted'].includes(s.borderStyle))$('#borderStyle').value=s.borderStyle;updateBorderControls();setStorageStatus('Project sebelumnya dipulihkan','ok');return true}catch(e){console.warn(e);return false}}
+function migrateQueueIndependentEdits(){
+  let changed=false;
+  const queuePhotoMap=new Map();
+  for(const q of state.queue){
+    const current=state.photos.find(p=>p.id===q.photoId);
+    if(current?.isQueueClone){
+      q.sourcePhotoId=q.sourcePhotoId||current.sourcePhotoId||current.id;
+      continue
+    }
+    if(!current)continue;
+    const cloneId=gid(),rootId=q.sourcePhotoId||current.sourcePhotoId||current.id;
+    const clone={...current,id:cloneId,sourcePhotoId:rootId,isQueueClone:true};
+    state.photos.push(clone);
+    state.adjustments[cloneId]={...DEFAULT_ADJ,...(state.adjustments[current.id]||{})};
+    queuePhotoMap.set(q.id,cloneId);
+    q.photoId=cloneId;
+    q.sourcePhotoId=rootId;
+    changed=true;
+  }
+  if(changed&&Array.isArray(state.layoutPages)){
+    for(const pg of state.layoutPages)for(const it of (pg.items||[])){
+      const cloneId=queuePhotoMap.get(it.id);
+      if(cloneId)it.photoId=cloneId;
+    }
+  }
+  return changed
+}
+function restoreProject(){try{let raw=localStorage.getItem(STORAGE_KEY);if(!raw){for(const k of LEGACY_STORAGE_KEYS){raw=localStorage.getItem(k);if(raw)break}}if(!raw)return false;const d=JSON.parse(raw);if(!d||!Array.isArray(d.photos))return false;state.photos=d.photos.map(p=>({...p,aiCutoutDataUrl:p.aiCutoutDataUrl||null}));state.queue=Array.isArray(d.queue)?d.queue:[];state.layoutPages=Array.isArray(d.layoutPages)?d.layoutPages:[];state.adjustments=d.adjustments||{};for(const p of state.photos)state.adjustments[p.id]={...DEFAULT_ADJ,...(state.adjustments[p.id]||{})};migrateQueueIndependentEdits();const s=d.settings||{};if(s.paperSize&&PAPER_SIZES[s.paperSize])$('#paperSize').value=s.paperSize;if(s.margin!=null)$('#margin').value=s.margin;if(s.gap!=null)$('#gap').value=s.gap;if(s.smartRotation!=null)$('#smartRotation').checked=!!s.smartRotation;if(s.cropMarks!=null)$('#cropMarks').checked=!!s.cropMarks;if(s.photoBorder!=null)$('#photoBorder').checked=!!s.photoBorder;if(s.borderColor&&/^#[0-9a-f]{6}$/i.test(s.borderColor)){$('#borderColor').value=s.borderColor;$('#borderColorText').value=s.borderColor}if(s.borderWidth!=null)$('#borderWidth').value=s.borderWidth;if(['solid','dashed','dotted'].includes(s.borderStyle))$('#borderStyle').value=s.borderStyle;updateBorderControls();setStorageStatus('Project sebelumnya dipulihkan','ok');return true}catch(e){console.warn(e);return false}}
 function newProject(){if(!confirm('Hapus project yang tersimpan di perangkat ini dan mulai project baru?'))return;localStorage.removeItem(STORAGE_KEY);state.photos=[];state.queue=[];state.layoutPages=[];state.adjustments={};state.processedCache.clear();renderPhotos();renderQueue();renderWorkspace();setStorageStatus('Project baru','ok')}
 $('#fileInput').addEventListener('change',e=>{addFiles(e.target.files);e.target.value='' });const dz=$('#dropZone');['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('dragover')}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('dragover')}));dz.addEventListener('drop',e=>addFiles(e.dataTransfer.files));
 $('#photoLibrary').addEventListener('click',e=>{const r=e.target.closest('[data-remove-photo]'),a=e.target.closest('[data-add]'),ed=e.target.closest('[data-edit-photo]');if(r)removePhoto(r.dataset.removePhoto);if(a){const [pid,pre]=a.dataset.add.split('|');addToQueue(pid,pre)}if(ed)openEditor(ed.dataset.editPhoto)});
-$('#printQueue').addEventListener('click',e=>{const q=e.target.closest('[data-qty]'),rm=e.target.closest('[data-remove-queue]'),ed=e.target.closest('[data-edit]');if(q){const[id,d]=q.dataset.qty.split('|'),it=state.queue.find(x=>x.id===id);if(it)it.qty=Math.max(1,it.qty+Number(d));renderQueue();invalidate()}if(rm){state.queue=state.queue.filter(x=>x.id!==rm.dataset.removeQueue);renderQueue();invalidate()}if(ed)openEditor(ed.dataset.edit)});
+$('#printQueue').addEventListener('click',e=>{
+  const q=e.target.closest('[data-qty]'),rm=e.target.closest('[data-remove-queue]'),ed=e.target.closest('[data-edit]');
+  if(q){
+    const[id,d]=q.dataset.qty.split('|'),it=state.queue.find(x=>x.id===id);
+    if(it)it.qty=Math.max(1,it.qty+Number(d));
+    renderQueue();invalidate()
+  }
+  if(rm){
+    const id=rm.dataset.removeQueue,it=state.queue.find(x=>x.id===id);
+    if(it){
+      state.photos=state.photos.filter(p=>p.id!==it.photoId);
+      delete state.adjustments[it.photoId];
+      resetCache(it.photoId)
+    }
+    state.queue=state.queue.filter(x=>x.id!==id);
+    renderQueue();invalidate()
+  }
+  if(ed)openEditor(ed.dataset.edit)
+});
 ['paperSize','margin','gap'].forEach(id=>$('#'+id).addEventListener('change',()=>invalidate()));
 /* v11: Smart Rotation tidak membongkar layout yang sudah jadi. Layout tetap terkunci sampai pengguna menekan Run Auto Layout. */
 $('#smartRotation').addEventListener('change',()=>{renderWorkspace();scheduleSave()});

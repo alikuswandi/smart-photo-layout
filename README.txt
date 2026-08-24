@@ -26,3 +26,10 @@ v14 Login Akses Penuh:
 - Login default: admin / AditPrint2026
 - Tombol WhatsApp dan Lynk.id tersedia di form login.
 - Status login berlaku selama tab/sesi browser aktif.
+
+
+v15 - Edit Antrean Independen:
+- Setiap baris foto yang ditambahkan ke Antrean Cetak memiliki salinan edit tersendiri.
+- Zoom, posisi X/Y, rotasi, preset warna, background warna, dan hasil AI pada satu item antrean tidak mengubah item antrean lain walaupun sumber filenya sama.
+- Edit Foto dari Library menjadi dasar saat item baru dimasukkan ke antrean.
+- Quantity dalam satu baris antrean tetap memakai edit yang sama untuk semua copy pada baris tersebut.
