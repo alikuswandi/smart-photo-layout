@@ -1,0 +1,47 @@
+SMART PHOTO LAYOUT v17 — FIREBASE LOGIN
+=======================================
+
+1. Buka https://console.firebase.google.com/ dan buat project Firebase.
+2. Di Project Overview, tambahkan Web App (ikon </>).
+3. Salin nilai firebaseConfig yang diberikan Firebase.
+4. Buka file firebase-config.js di project ini lalu ganti nilai YOUR_... dengan config tersebut.
+5. Firebase Console > Authentication > Get started.
+6. Tab Sign-in method > Email/Password > Enable > Save.
+7. Authentication > Users > Add user.
+
+   Agar login di aplikasi tetap memakai:
+      Username: admin
+
+   buat akun Firebase dengan email:
+      admin@smartphotolayout.local
+
+   Password dapat Anda tentukan sendiri, misalnya password lama jika masih ingin digunakan.
+   Password hanya disimpan/dikelola oleh Firebase Authentication, BUKAN di source aplikasi.
+
+8. Deploy seluruh folder ke GitHub/Vercel seperti versi sebelumnya.
+
+CARA LOGIN
+----------
+- Pengguna mengetik username "admin".
+- Aplikasi mengubahnya secara internal menjadi admin@smartphotolayout.local.
+- Firebase memverifikasi password secara online.
+- Session memakai LOCAL persistence, sehingga login tetap aktif setelah refresh sampai logout/session dicabut.
+
+AKSES
+-----
+Tanpa login:
+- Upload foto
+- Edit foto
+- Background removal/editor
+- Membuat layout & preview
+
+Setelah login Firebase:
+- Print
+- Export/Download PDF
+
+CATATAN KEAMANAN
+-----------------
+- Jangan pernah hardcode password pengguna di app.js/firebase-config.js.
+- Firebase Web API key/config bukan password administrator dan memang digunakan oleh aplikasi web.
+- Jangan menambahkan Firebase Admin SDK/service-account private key ke frontend.
+- Jika ingin menambah user, buat dari Firebase Authentication > Users.
